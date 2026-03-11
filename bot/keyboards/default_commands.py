@@ -8,19 +8,20 @@ if TYPE_CHECKING:
 
 users_commands: dict[str, dict[str, str]] = {
     "ru": {
-        "start": "старт",
-        "help": "помощь",
+        "start": "Главное меню",
+        "help": "Помощь по боту",
+        "zapis": "Записаться на приём",
+        "uslugi": "Услуги и цены",
+        "vopros": "Задать вопрос",
+        "consult": "Подбор услуги (ИИ)",
     },
 }
 
 admins_commands: dict[str, dict[str, str]] = {
-    "en": {
-        "ping": "Check bot ping",
-        "stats": "Show bot stats",
-    },
     "ru": {
-        "ping": "Check bot ping",
-        "stats": "Show bot stats",
+        "admin": "Админ-панель клиники",
+        "stats": "Статистика бота",
+        "ping": "Проверка работы бота",
     },
 }
 
