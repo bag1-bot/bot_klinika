@@ -1,0 +1,8 @@
+aiogram==3.13.1
+SQLAlchemy==2.0.36
+alembic==1.14.0
+pydantic-settings==2.5.2
+loguru==0.7.2
+sentry-sdk==2.19.2
+cachetools
+uvloop
