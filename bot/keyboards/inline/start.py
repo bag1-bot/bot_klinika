@@ -38,7 +38,7 @@ def start_keyboard() -> InlineKeyboardMarkup:
     )
     kb.row(
         InlineKeyboardButton(
-            text="🤖 Подбор услуги (заглушка)",
+            text="🤖 Подбор услуги (ИИ)",
             callback_data=StartCallbacks.AI_CONSULT,
         ),
     )

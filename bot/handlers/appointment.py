@@ -7,12 +7,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loguru import logger
+
 from bot.domain.models import AppointmentStatus, MessageAuthor
 from bot.keyboards.inline.start import StartCallbacks
+from bot.services.ai_service import AIEntityExtractor
 from bot.services.appointments import AppointmentService
 from bot.services.crm_stub import CrmStubClient
 from bot.services.dialogs import DialogService
-from bot.services.entities_stub import SimpleEntityExtractor
+from bot.utils.validators import validate_date, validate_name, validate_phone, validate_service
 
 
 router = Router(name="appointment")
@@ -37,33 +40,57 @@ async def start_appointment(callback: types.CallbackQuery, state: FSMContext) ->
 
 @router.message(AppointmentStates.ASK_NAME)
 async def ask_phone(message: types.Message, state: FSMContext) -> None:
-    await state.update_data(client_name=message.text.strip())
-    await message.answer("Укажите, пожалуйста, ваш номер телефона.")
+    raw = (message.text or "").strip()
+    ok, cleaned, error = validate_name(raw)
+    logger.debug(f"[validate name] raw={raw!r}  ok={ok}  cleaned={cleaned!r}  error={error!r}")
+    if not ok:
+        await message.answer(f"{error}\n\nКак вас зовут?")
+        return  # остаёмся в ASK_NAME
+    await state.update_data(client_name=cleaned)
+    await message.answer("Укажите, пожалуйста, ваш номер телефона.\n\nНапример: +7 999 123-45-67 или 89991234567.")
     await state.set_state(AppointmentStates.ASK_PHONE)
 
 
 @router.message(AppointmentStates.ASK_PHONE)
 async def ask_service(message: types.Message, state: FSMContext) -> None:
-    extractor = SimpleEntityExtractor()
-    entities = await extractor.extract(message.text or "")
-    phone = entities.phone or (message.text or "").strip()
-    await state.update_data(phone=phone)
-    await message.answer("Какую услугу вы рассматриваете?")
+    raw = (message.text or "").strip()
+    # Сначала пробуем AI-извлечение — вдруг пользователь написал фразой
+    extractor = AIEntityExtractor()
+    entities = await extractor.extract(raw)
+    candidate = entities.phone or raw
+
+    ok, cleaned, error = validate_phone(candidate)
+    logger.debug(f"[validate phone] raw={raw!r}  ai_extracted={entities.phone!r}  ok={ok}  cleaned={cleaned!r}  error={error!r}")
+    if not ok:
+        await message.answer(f"{error}")
+        return  # остаёмся в ASK_PHONE
+    await state.update_data(phone=cleaned)
+    await message.answer("Какую услугу вы рассматриваете?\n\nНапример: «Терапевт», «УЗИ», «Стоматолог».")
     await state.set_state(AppointmentStates.ASK_SERVICE)
 
 
 @router.message(AppointmentStates.ASK_SERVICE)
 async def ask_date(message: types.Message, state: FSMContext) -> None:
-    await state.update_data(service=message.text.strip())
-    await message.answer("На какую дату и время вы хотите записаться?\n\nНапример: 25.03 в 15:00")
+    raw = (message.text or "").strip()
+    ok, cleaned, error = validate_service(raw)
+    logger.debug(f"[validate service] raw={raw!r}  ok={ok}  cleaned={cleaned!r}  error={error!r}")
+    if not ok:
+        await message.answer(f"{error}")
+        return  # остаёмся в ASK_SERVICE
+    await state.update_data(service=cleaned)
+    await message.answer("На какую дату и время вы хотите записаться?\n\nНапример: «25.03 в 15:00» или «завтра в 10:00».")
     await state.set_state(AppointmentStates.ASK_DATE)
 
 
 @router.message(AppointmentStates.ASK_DATE)
 async def confirm(message: types.Message, state: FSMContext) -> None:
-    # Для простоты сейчас не парсим дату, а сохраняем как есть в отдельное поле
-    raw_date = message.text.strip()
-    await state.update_data(raw_date=raw_date)
+    raw = (message.text or "").strip()
+    ok, cleaned, error = validate_date(raw)
+    logger.debug(f"[validate date] raw={raw!r}  ok={ok}  cleaned={cleaned!r}  error={error!r}")
+    if not ok:
+        await message.answer(f"{error}")
+        return  # остаёмся в ASK_DATE
+    await state.update_data(raw_date=cleaned)
 
     data = await state.get_data()
     text = (

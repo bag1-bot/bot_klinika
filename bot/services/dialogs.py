@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import datetime
 from typing import Iterable
 
+from loguru import logger
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import DialogModel, MessageModel
 from bot.domain.models import DialogStatus, MessageAuthor
+
+# Диалог считается устаревшим, если последнее обновление было раньше этого порога
+DIALOG_TTL_SECONDS = 1800  # 30 минут бездействия → контекст сбрасывается
 
 
 class DialogService:
@@ -25,13 +30,22 @@ class DialogService:
         result = await self._session.execute(query)
         dialog = result.scalar_one_or_none()
 
-        if dialog:
-            return dialog
+        if dialog is not None:
+            inactive_for = (datetime.datetime.utcnow() - dialog.updated_at).total_seconds()
+            if inactive_for > DIALOG_TTL_SECONDS:
+                logger.info(
+                    f"[dialog TTL] user_id={user_id} диалог #{dialog.id} "
+                    f"неактивен {inactive_for:.0f}с > {DIALOG_TTL_SECONDS}с — закрываю"
+                )
+                await self.change_status(dialog.id, DialogStatus.CLOSED)
+                dialog = None
 
-        dialog = DialogModel(user_id=user_id, status=DialogStatus.ACTIVE, channel=channel)
-        self._session.add(dialog)
-        await self._session.commit()
-        await self._session.refresh(dialog)
+        if dialog is None:
+            dialog = DialogModel(user_id=user_id, status=DialogStatus.ACTIVE, channel=channel)
+            self._session.add(dialog)
+            await self._session.commit()
+            await self._session.refresh(dialog)
+
         return dialog
 
     async def change_status(self, dialog_id: int, status: DialogStatus) -> None:

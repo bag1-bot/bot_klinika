@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sentry_sdk
-import uvloop
+import asyncio
 from loguru import logger
 
 from bot.core.config import settings
@@ -74,4 +74,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    uvloop.run(main())
+    asyncio.run(main())

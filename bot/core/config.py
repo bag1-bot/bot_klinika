@@ -41,5 +41,7 @@ class Settings(BotSettings, DBSettings):
 
     SENTRY_DSN: str | None = None
 
+    OPENROUTE_API_KEY: str | None = None
+
 
 settings = Settings()
