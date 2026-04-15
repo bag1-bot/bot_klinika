@@ -41,7 +41,14 @@ class Settings(BotSettings, DBSettings):
 
     SENTRY_DSN: str | None = None
 
-    OPENROUTE_API_KEY: str | None = None
+    OPENROUTE_API_KEY: str | None = None  # оставлен для обратной совместимости
+
+    # Yandex AI Studio
+    YANDEX_API_KEY: str | None = None
+    YANDEX_FOLDER_ID: str = "b1ge26pgpdokkhdjupph"
+
+    # RAG: путь к папке с документами клиники
+    RAG_DOCS_DIR: str = ""
 
 
 settings = Settings()
