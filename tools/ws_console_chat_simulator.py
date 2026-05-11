@@ -8,6 +8,7 @@ import signal
 import string
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from aiohttp import web
@@ -15,7 +16,20 @@ from websockets.client import connect
 from websockets.exceptions import ConnectionClosed
 
 
-WS_URL: str = os.getenv("WS_URL", "wss://bot-server.ru/ws/chat/{admin_id}")
+def _load_tools_env_file() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    p = Path(__file__).resolve().parent / ".env"
+    if p.is_file():
+        load_dotenv(p, override=False)
+
+
+_load_tools_env_file()
+
+
+WS_URL: str = os.getenv("WS_URL", "ws://127.0.0.1:8001/ws/chat/{admin_id}")
 ADMIN_ID: str = os.getenv("ADMIN_ID", "admin_1")
 TOKEN: str = os.getenv("TOKEN", "CHANGE_ME")
 

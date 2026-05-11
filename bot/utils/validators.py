@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 import re
 import unicodedata
 
@@ -157,3 +159,96 @@ def validate_date(raw: str) -> tuple[bool, str | None, str | None]:
         )
 
     return True, text, None
+
+
+# ── Парсинг даты/времени для проверки "не в прошлом" ─────────────────────────
+_RE_DDMMYYYY = re.compile(r"(?P<d>\d{1,2})[./-](?P<m>\d{1,2})(?:[./-](?P<y>\d{2,4}))?")
+_RE_HHMM = re.compile(r"(?P<h>\d{1,2})\s*[:.]\s*(?P<min>\d{2})")
+
+
+@dataclass(frozen=True)
+class ParsedDateTime:
+    dt: datetime
+    has_time: bool
+
+
+def parse_requested_datetime(raw: str, *, now: datetime | None = None) -> ParsedDateTime | None:
+    """Пытается распарсить дату/время из текста пользователя.
+
+    Поддерживаем базовые форматы:
+    - 25.03 15:00 / 25.03.2026 15:00 / 25/03 в 15:00
+    - сегодня/завтра/послезавтра + HH:MM
+
+    Возвращает datetime в локальном времени сервера (naive) и флаг наличия времени.
+    """
+    text = raw.strip().lower()
+    now = now or datetime.now()
+
+    has_time = False
+    t_match = _RE_HHMM.search(text)
+    parsed_time = time(0, 0)
+    if t_match:
+        h = int(t_match.group("h"))
+        mi = int(t_match.group("min"))
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            parsed_time = time(h, mi)
+            has_time = True
+
+    # относительные слова
+    base_day: date | None = None
+    if "сегодня" in text:
+        base_day = now.date()
+    elif "завтра" in text:
+        base_day = (now + timedelta(days=1)).date()
+    elif "послезавтра" in text:
+        base_day = (now + timedelta(days=2)).date()
+
+    if base_day is not None:
+        return ParsedDateTime(dt=datetime.combine(base_day, parsed_time), has_time=has_time)
+
+    # явная дата
+    d_match = _RE_DDMMYYYY.search(text)
+    if not d_match:
+        return None
+
+    d = int(d_match.group("d"))
+    m = int(d_match.group("m"))
+    y_raw = d_match.group("y")
+    if y_raw:
+        y = int(y_raw)
+        if y < 100:
+            y += 2000
+    else:
+        y = now.year
+
+    try:
+        return ParsedDateTime(dt=datetime(y, m, d, parsed_time.hour, parsed_time.minute), has_time=has_time)
+    except ValueError:
+        return None
+
+
+def validate_not_past_datetime(raw: str, *, now: datetime | None = None) -> tuple[bool, datetime | None, str | None]:
+    """Проверяет, что дата/время не в прошлом.
+
+    Если время не указано, проверяем только дату (дата должна быть сегодня или позже).
+    Если дата == сегодня и время не указано — просим указать время.
+    """
+    now = now or datetime.now()
+    parsed = parse_requested_datetime(raw, now=now)
+    if parsed is None:
+        # Не можем проверить строго — пусть основной валидатор решит формат,
+        # а здесь просто не блокируем.
+        return True, None, None
+
+    if not parsed.has_time:
+        # Только дата
+        if parsed.dt.date() < now.date():
+            return False, None, "На прошедшую дату записаться нельзя. Укажите, пожалуйста, дату в будущем."
+        if parsed.dt.date() == now.date():
+            return False, None, "На сегодня нужно указать время. Например: «сегодня в 16:30»."
+        return True, parsed.dt, None
+
+    if parsed.dt < now:
+        return False, None, "На прошедшее время записаться нельзя. Укажите, пожалуйста, дату/время в будущем."
+
+    return True, parsed.dt, None
